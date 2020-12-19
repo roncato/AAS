@@ -1,0 +1,2639 @@
+;  Copyright (C) 2014 Lucas Batista
+;  All rights reserved.
+
+;  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+;  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+;  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+;  DISCLAIMED. IN NO EVENT SHALL LUCAS BATISTA BE LIABLE FOR ANY
+;  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+;  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+;  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+;  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+;  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+;  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+; Globals
+
+globals
+[
+  
+  BaseTimeResolution
+  TimeResolution ; s
+  SpaceResolution ; m
+  Clock ; s
+  HealthMax
+  
+  ; Environment
+  SummerAvailableEnergy
+  SpringAvailableEnergy
+  FallAvailableEnergy
+  WinterAvailableEnergy
+  FruitTotalEnergy
+  Season
+  PeriodOfDay
+  
+  ; Tolerances
+  AttackingAggressivenessTolerance
+  FemaleMaleRatioTolerance
+  HungryAggressivenessTolerance
+  HungerTolerance
+  DaysWithoutMatingTolerance
+  DaysToForgetPastSexualPartners
+  MovePeriod
+  
+  ; Updates
+  UpdateAge?
+  UpdateDiseaseTransmission?
+  UpdateImmuneSystem?
+  UpdateMetabolism?
+  UpdateHealth?
+  UpdateEnergy?
+  UpdateSpeed?
+  UpdateVision?
+  UpdateStrength?
+  UpdateFertility?
+  UpdateLongevity?
+  UpdateSize?
+  UpdateRank?
+  UpdateMating?
+  
+  ; Parameters
+  StrengthEngagementTolerance
+  AdultMaleEngagementTolerance
+  AdultFemaleEngagementTolerance
+  GestationPeriod
+  TribeExpectedLevels
+  TribeFormationOffset
+  SectorWidth
+  MovingTurnDegrees
+  NightAcceleration
+  LogFileName
+  MaleAgeTolerance
+  PregnanceMetabolism
+  
+  ; Logging
+  LogEvents?
+  
+  ; Tracking
+  Deaths
+  Engagements
+  Mates
+  Births
+  Seasons
+  Flurts
+  AgeChanges
+  Escapes
+  
+]
+
+;##############################################################################################################################################
+
+; Breeds
+
+; Entities
+breed [apes ape]
+breed [troops troop]
+breed [tribes tribe]
+breed [plants plant]
+breed [trees tree]
+breed [halos halo]
+breed [astro]
+
+;##############################################################################################################################################
+
+; Properties
+
+patches-own
+[
+ tcolor 
+]
+
+; Entities
+apes-own
+[
+
+ ; Constant
+ chromosomes ; (ImmuneSystem, Strength, Vision, Fertility, HealRate, Speed, MetabolismRate)
+  
+ sex ; M, F
+ mytroop
+ 
+ ; Epidimonology
+ immuneSystem
+ diseases
+ 
+ ; Traits
+ energy
+ health
+ strength
+ speed ; m/s
+ vision
+ healRate
+ fertility ; %
+ longevity ; s
+ metabolism
+ wound
+ pregnancy
+ childFatherChromosomes
+ age ; s
+ 
+ ; Social
+ mother
+ rank
+ generation
+ family
+ 
+ ; Events
+ events
+ 
+ ; State
+ state
+ 
+ ; Combat
+ aggressiveness
+ attackRange
+ 
+ ; Memory
+ targetedEnemy
+ assaulter
+ food
+ lastState
+ sexualPartner
+ pastSexualPartners
+ timeWithoutMate
+ nursingInfant
+ lastTimeMoved
+ 
+ forageTrees
+ homeX
+ homeY
+ 
+]
+
+troops-own
+[
+ leader
+ followers
+ mytribe
+ rowSize
+ offSet
+ radius
+]
+
+tribes-own
+[
+  number
+]
+
+trees-own
+[
+ fruitEnergy
+ energy
+ height
+]
+
+plants-own
+[
+ height 
+]
+
+halos-own
+[
+ myape 
+]
+
+;##############################################################################################################################################
+
+; Globals
+
+to setupDefaults
+  
+  set SpaceResolution 1
+  set BaseTimeResolution 1
+  set TimeResolution 1
+  set HealthMax 100
+  set Clock 0
+  set StrengthEngagementTolerance 1.0
+  set AdultMaleEngagementTolerance 3.0
+  set AdultFemaleEngagementTolerance 3.0
+  
+  set UpdateAge? true
+  set UpdateDiseaseTransmission? true
+  set UpdateImmuneSystem? true
+  set UpdateMetabolism? true
+  set UpdateHealth? true
+  set UpdateEnergy? true
+  set UpdateSpeed? true
+  set UpdateVision? true
+  set UpdateStrength? true
+  set UpdateFertility? true
+  set UpdateLongevity? true
+  set UpdateSize? true
+  set UpdateRank? true
+  set UpdateMating? true
+  
+  set SummerAvailableEnergy 300
+  set SpringAvailableEnergy 400
+  set FallAvailableEnergy 200
+  set WinterAvailableEnergy 150
+  set FruitTotalEnergy 1
+  set Season getSeason
+  set PeriodOfDay "Night"
+  set MovePeriod 60
+  
+  set AttackingAggressivenessTolerance 0.90
+  set FemaleMaleRatioTolerance 0.25
+  set HungryAggressivenessTolerance 0.5
+  set HungerTolerance 0.9
+  set DaysWithoutMatingTolerance 0.5
+  set DaysToForgetPastSexualPartners 2.0
+  set GestationPeriod getBaseTimeFromDays 164 1
+  set TribeExpectedLevels 10
+  set TribeFormationOffset 3
+  set SectorWidth 1
+  set MovingTurnDegrees 45
+  set NightAcceleration 1
+  set MaleAgeTolerance 5
+  set PregnanceMetabolism 0.2
+  set LogEvents? false
+  set LogFileName "log.txt"
+    
+end
+
+to-report getSeason
+  let s ""
+  let month getMonth Clock 1
+  ifelse (month = 12 or month = 1 or month = 2)
+  [
+    set s "Winter"
+  ]
+  [
+    ifelse (month = 3 or month = 4 or month = 5)
+    [
+      set s "Spring"
+    ]
+    [
+      ifelse (month = 6 or month = 7 or month = 8)
+      [
+        set s "Summer"
+      ]
+      [
+       set s "Fall"
+      ]
+    ]
+  ]
+  report s
+end
+
+;##############################################################################################################################################
+
+; Utility
+
+to-report minimum [n1 n2]
+  let n 0
+  ifelse (n1 < n2)
+  [set n n1]
+  [set n n2]
+  report n
+end
+
+to-report maximum [n1 n2]
+  let n 0
+  ifelse (n1 > n2)
+  [set n n1]
+  [set n n2]
+  report n
+end
+
+to-report getWorldWidth
+  report (max-pxcor - min-pxcor)
+end
+
+to-report getWorldHeight
+  report (max-pycor - min-pycor)
+end
+
+to-report getWorldArea
+  report getWorldWidth * getWorldHeight
+end
+
+to-report getPopDensity
+  report (count apes) / getWorldArea
+end
+
+to-report isPregnant
+  report (pregnancy >= 0)
+end
+
+to-report isChildReady
+  report (pregnancy >= GestationPeriod)
+end
+
+to-report getTimeInDays [time base]
+  report (time * base) / 86400
+end
+
+to-report getTimeInYears [time base]
+  report (getTimeInDays time base) / 365
+end
+
+to-report getBaseTimeFromDays [days base]
+  report days * 86400 / base
+end
+
+to-report getBaseTimeFromYears [years base]
+  report years * (getBaseTimeFromDays 365 base)
+end
+
+to-report getYear [time base]
+  let years getTimeInYears time base
+  report floor years
+end
+
+to-report getMonth [time base]
+  let years getTimeInYears time base
+  let yearFraction years - (floor years)
+  report 1 + (floor (yearFraction * 12))
+end
+
+to-report getDay [time base]
+  let years getTimeInYears time base
+  let yearFraction years - floor years
+  let months yearFraction * 12
+  let monthFraction months - floor months
+  let month getMonth time base
+  let year getYear time base
+  let daysInMonth 30
+  ifelse(month = 1 or month = 3 or month = 5 or month = 7
+    or month = 8 or month = 10 or month = 12)
+  [set daysInMonth 30]
+  [
+    if(month = 2)
+    [
+      set daysInMonth 28
+      if(year mod 4 = 0)
+      [
+        set daysInMonth 29
+      ]
+    ]
+   ]
+  report 1 + floor (monthFraction * 30)
+end
+
+to-report getHour [time base]
+  let years getTimeInYears time base
+  let yearFraction years - floor years
+  let month yearFraction * 12
+  let monthFraction month - floor month
+  let days monthFraction * 30
+  let hour (days - (floor days)) * 24
+  report hour
+end
+
+to-report getApeIn [lRadius]
+  report one-of apes with [distancexy mouse-xcor mouse-ycor <= lRadius]
+end
+
+to-report hammingDistance [string1 string2 index1 index2 subDistance]
+  let result 0
+  let i 0
+  while [i < subDistance]
+  [
+   if (item index1 string1 != item index2 string2)
+   [
+    set result result + 1 
+   ]
+   set index1 index1 + 1
+   set index2 index2 + 1
+   set i i + 1
+  ] 
+  report result
+end 
+
+to-report findLeastHammingDistance [string1 string2]
+  let minDistance length string2
+  let index 0
+  let result []
+  while [index < (length string1 - length string2)]
+  [
+   let d hammingDistance string1 string2 index 0 (length string2)
+   if (d < minDistance)
+   [
+     set minDistance d
+     let lResult []
+     set lResult lput index lResult
+     set lResult lput d lResult
+     set result lResult
+   ]
+   set index index + 1 
+  ]
+  report result
+end
+
+to-report groupByStrength [agentSet]
+  let groups []
+  ask agentSet
+  [
+    ifelse(length groups = 0)
+    [
+      let group []
+      let members []
+      set group lput (floor strength) group
+      set members lput self members
+      set group lput members group
+      set groups lput group groups
+    ]
+    [
+      let index 0
+      let added false
+      foreach groups
+      [
+       let gStrength item 0 ?
+       if ((floor gStrength) = (floor strength))
+       [
+         let members item 1 ?
+         set members lput self members
+         set ? replace-item 1 ? members
+         set groups replace-item index groups ?
+         set added true
+       ]
+       set index index + 1
+      ]
+      if (not added)
+      [
+        let group []
+        let members []
+        set group lput (floor strength) group
+        set members lput self members
+        set group lput members group
+        set groups lput group groups
+      ]
+    ]
+  ]
+  report groups
+end
+
+to-report getAgeName [me]
+  let ageInYears getTimeInYears ([age] of me) 1
+  let name ""
+  ifelse(ageInYears <= 1)
+  [
+    set name "Infant"
+  ]
+  [
+    ifelse(ageInYears > 1 and ageInYears <= 2)
+    [
+      set name "Yearling"
+    ]
+    [
+      ifelse ([sex] of me = "M")
+      [
+        ifelse(ageInYears > 2 and ageInYears <= 3)
+        [
+          set name "Juvenile"
+        ]
+        [
+          set name "Adult"
+        ]
+      ]
+      [
+        ifelse(ageInYears > 2 and ageInYears <= 4)
+        [
+          set name "Juvenile"
+        ]
+        [
+          set name "Adult"
+        ]
+      ]
+    ]
+  ]
+  report name
+end
+
+to-report isMatingSeason [time]
+  let month getMonth time 1
+  report month >= 10 and month <= 12
+end
+
+;##############################################################################################################################################
+
+; Log
+
+to openLogFile
+  file-close-all
+  file-open LogFileName
+end
+
+to deleteLogFile
+if (file-exists? LogFileName)
+[
+  file-delete LogFileName
+]
+end
+
+to closeLogFile
+  file-close
+end
+
+to logToFile [value]
+  file-print value
+end
+
+;##############################################################################################################################################
+
+; Push Down Automata
+
+; Pushes symbol to stack and return it
+to-report push [stack symbol]
+  set stack fput symbol stack
+  report stack
+end
+
+; Pops symbol to stack and returns a pair symbol, stack
+to-report pop [stack]
+  let symbol peek stack
+  set stack sublist stack 1 (length stack)
+  let result []
+  set result lput symbol result
+  set result lput stack result
+  report result
+end
+
+; Returns the item on top of the stack
+to-report peek [stack]
+  report item 0 stack
+end
+
+; Whether the stack is empty
+to-report isEmpty [stack]
+  report length stack > 0
+end
+
+;##############################################################################################################################################
+
+; Terrain
+
+to createTerrain [hide]
+  ask patches
+  [
+    set tcolor scale-color brown (5 + random 3) 0 10
+  ]
+  repeat 3
+  [
+    ask patches
+    [
+      let avgColor (sum [tcolor] of neighbors) / (count neighbors)
+      set tcolor avgColor
+      if(hide)
+      [
+        set pcolor tcolor
+      ]
+    ]
+  ]
+end
+
+to createAstro
+  create-astro 1
+  [
+   set size 10
+   setxy (max-pxcor - size / 2) (max-pycor - size / 2)
+   set shape "circle"
+   set color rgb 2 5 83
+  ]
+  updatePeriodOfDay
+end
+
+to createPlants [density]
+  let nplants density * (getWorldArea / patch-size)
+  create-plants nplants
+  [
+    set height random-normal 0.5 0.3
+    set size height / SpaceResolution
+    set color green
+    set shape "plant"
+    setxy min-pxcor + random getWorldWidth min-pycor + random getWorldHeight
+  ]
+end
+
+to createTrees [density]
+  let ntrees density / 100 * (SpaceResolution) * (getWorldArea / patch-size)
+  let seasonEnergy 0
+  let currentSeason getSeason
+  ifelse (currentSeason = "Winter")
+  [
+    set seasonEnergy WinterAvailableEnergy
+  ]
+  [
+    ifelse (currentSeason = "Spring")
+    [
+      set seasonEnergy SpringAvailableEnergy
+    ]
+    [
+      ifelse (currentSeason = "Summer")
+      [
+        set seasonEnergy SummerAvailableEnergy
+      ]
+      [
+        set seasonEnergy FallAvailableEnergy
+      ]
+    ]
+  ]
+    
+  create-trees ntrees
+  [
+    set height random-normal 4 0.5
+    set size height / SpaceResolution
+    set fruitEnergy FruitTotalEnergy
+    set shape "tree"
+    setxy min-pxcor + random getWorldWidth min-pycor + random getWorldHeight
+    set energy random-normal seasonEnergy (FruitTotalEnergy * 50)
+    set color scale-color green energy (SummerAvailableEnergy / 8) (SummerAvailableEnergy * 2)
+  ]
+end
+
+to-report getPeriodOfDay
+  let period ""
+  let hour getHour Clock 1
+  ifelse (hour > 6 and hour <= 12)
+  [
+    set period "Morning" 
+  ]
+  [
+    ifelse (hour > 12 and hour <= 15)
+    [
+      set period "Afternoon" 
+    ]
+    [
+      ifelse (hour > 15 and hour <= 18)
+      [
+        set period "Evening" 
+      ]
+      [
+        ifelse (hour > 18 and hour <= 23.99)
+        [
+          set period "Night"
+        ]
+        [
+          set period "Dawn"
+        ]
+      ]
+    ]
+  ]
+  report period
+end
+
+;##############################################################################################################################################
+
+; Troop
+
+; Align Troop
+to alignSquareTroop [lTroop]
+  let index 0
+  ask lTroop
+  [
+    foreach followers
+    [
+      ask ?
+      [
+        alignSquareFormation lTroop index
+      ]
+      set index index + 1
+    ]
+  ]
+end
+
+; Align to a formation
+to alignSquareFormation [lTroop followerIndex]
+  
+  ; Gets objects
+  let lLeader [leader] of lTroop
+  let follower item followerIndex [followers] of lTroop
+  let troopsize length [followers] of lTroop
+  let lRowSize [rowSize] of lTroop
+  let lOffSet [offSet] of lTroop
+  
+  ; Global coordinates at 0
+  let x (followerIndex mod lRowSize) - ((lRowSize - 1) / 2.0)
+  set x lOffSet * x
+  let y (- floor (followerIndex / lRowSize + 1))
+  let angle [heading] of lLeader
+  set angle (- angle)
+  
+  let xr [xcor] of lLeader
+  let yr [ycor] of lLeader
+
+  ; Transform to local Coordinates  
+  ask follower
+  [
+    let xcos x * cos(angle)
+    let xsin x * sin(angle)
+    let ysin y * sin(angle)
+    let ycos y * cos(angle)
+    
+    set x (xcos - ysin)
+    set y (xsin + ycos)
+    
+    set x x + xr
+    set y y + yr
+    
+    if (not (distancexy x y <= 1))
+    [
+      facexy x y
+      runFastest
+    ]
+  ]
+  
+end
+
+to alignCircleTroopByStrength [lTroop]
+  let fs [followers] of lTroop
+  let groups groupByStrength fs
+  foreach groups
+  [
+   let d item 0 ?
+   let members item 1 ?
+   let lLeader [leader] of lTroop
+   let index 0
+   foreach sort-on [strength] (turtle-set members)
+   [
+    let theta 360 * (index / length members)
+    alignToCircleFormation ? ([xcor] of lLeader) ([ycor] of lLeader) d theta
+    set index index + 1
+   ]
+  ]
+end
+
+; Aligns ape to circle
+to alignToCircleFormation [me xCenter yCenter d theta]
+  
+  let x xCenter + d * cos(theta)
+  let y yCenter + d * sin(theta)
+    
+  ask me
+  [
+    if (not (distancexy x y <= 1))
+    [
+      facexy x y
+      runFastest
+    ]
+  ]
+  
+end
+
+; Sets home as troop location 
+to setHomeTroopLocation [me xCenter yCenter d theta]
+  let x xCenter + d * cos(theta)
+  let y yCenter + d * sin(theta)
+    
+  ask me
+  [
+    set homeX x
+    set homeY y
+  ]
+end
+
+;##############################################################################################################################################
+
+; Apes
+
+to setRandomApe
+      
+  ifelse (random-float 1.0 < 0.5)
+  [
+    set sex "M"
+  ]
+  [
+    set sex "F"
+  ]
+  
+  setRandomSexedApe
+  setApe
+
+end
+
+to setRandomSexedApe
+
+  set chromosomes []
+  
+  let randomImmuneSystem []
+  let randomStrength 0
+  let randomVision 0
+  let randomFertility 0
+  let randomHealRate 0
+  let randomSpeed 0
+  let randomMethbolismRate 0
+  let fiveDays getBaseTimeFromDays 5 1
+  
+  repeat 16
+  [
+    set randomImmuneSystem lput random 2 randomImmuneSystem
+  ]
+      
+  ifelse (sex = "M")
+  [
+    set randomStrength (random-normal 10 1)
+    set randomFertility 1
+  ]
+  [
+    set randomStrength (random-normal 5 1)
+    set randomFertility (minimum (random-normal 0.4 0.1) 1)
+  ]
+  
+  set randomVision (random-normal 20 4)  
+  set randomHealRate maximum 0.000046 (random-normal (20 / fiveDays) (4 / fiveDays))
+  set randomSpeed (random-normal 4 0.5)
+  set randomMethbolismRate (random-normal 8 2)
+  
+  set chromosomes lput randomImmuneSystem chromosomes
+  set chromosomes lput randomStrength chromosomes
+  set chromosomes lput randomVision chromosomes
+  set chromosomes lput randomFertility chromosomes
+  set chromosomes lput randomHealRate chromosomes
+  set chromosomes lput randomSpeed chromosomes
+  set chromosomes lput randomMethbolismRate chromosomes
+  
+  set age getBaseTimeFromYears (2 + random 10) 1
+  set rank 5 + random 5
+  set family random 100
+  set state "initial"
+  set mytroop nobody
+  set diseases []
+  set mother nobody
+  set assaulter nobody
+  set longevity getBaseTimeFromYears (20 + random 6) 1
+  setApe
+
+end
+
+to setApe
+  
+  set events[]
+  set lastState "initial"
+  set shape "monkey"
+  set forageTrees no-turtles
+  set targetedEnemy nobody
+  set pregnancy -1
+  set attackRange 2
+  set health HealthMax
+  set energy health
+  set aggressiveness 0
+  set metabolism 0
+  set generation 0
+  set childFatherChromosomes nobody
+  set nursingInfant nobody
+  set timeWithoutMate age
+  set pastSexualPartners (turtle-set nobody)
+  set lastTimeMoved 0
+     
+  updateSize
+    
+  set immuneSystem item 0 chromosomes
+  set strength item 1 chromosomes
+  set vision item 2 chromosomes
+  set fertility item 3 chromosomes
+  set healRate item 4 chromosomes
+  set speed item 5 chromosomes
+    
+end
+
+
+to deliverChild [me]
+  
+  let child nobody
+  
+  hatch 1
+  [
+    
+    set child self
+    set mother me
+    set age 0
+    set chromosomes []
+    set generation [generation] of me + 1
+    set family [family] of me
+    setxy ([xcor] of mother) ([ycor] of mother)
+    set homeX [homeX] of mother
+    set homeY [homeY] of mother
+    set state "BeingNursed"
+    set mytroop [mytroop] of mother
+    set assaulter nobody
+    set color brown
+    
+    let inheritedImmuneSystem []
+    let inheritedStrength 0
+    let inheritedVision 0
+    let inheritedFertility 0
+    let inheritedHealRate 0
+    let inheritedSpeed 0
+    let inheritedMethbolismRate 0
+    
+    ; Sex
+    ifelse (random-float 1.0 < 0.5)
+    [
+      set sex "M"
+      set inheritedStrength item 1 [childFatherChromosomes] of mother
+    ]
+    [
+      set sex "F"
+      set inheritedStrength item 1 [chromosomes] of mother
+    ]
+    
+    ; Immune System
+    ifelse (random-float 1.0 < 0.5)
+    [
+      set inheritedImmuneSystem item 0 [childFatherChromosomes] of mother
+    ]
+    [
+      set inheritedImmuneSystem item 0 [chromosomes] of mother
+    ]
+        
+    ; Vision
+    ifelse (random-float 1.0 < 0.5)
+    [
+      set inheritedVision item 2 [childFatherChromosomes] of mother
+    ]
+    [
+      set inheritedVision item 2 [chromosomes] of mother
+    ]
+    
+    ; Fertility
+    ifelse (random-float 1.0 < 0.5)
+    [
+      set inheritedFertility item 3 [childFatherChromosomes] of mother
+    ]
+    [
+      set inheritedFertility item 3 [chromosomes] of mother
+    ]
+    
+    ; Heal Rate
+    ifelse (random-float 1.0 < 0.5)
+    [
+      set inheritedHealRate item 4 [childFatherChromosomes] of mother
+    ]
+    [
+      set inheritedHealRate item 4 [chromosomes] of mother
+    ]
+    
+    ; Speed
+    ifelse (random-float 1.0 < 0.5)
+    [
+      set inheritedSpeed item 5 [childFatherChromosomes] of mother
+    ]
+    [
+      set inheritedSpeed item 5 [chromosomes] of mother
+    ]
+    
+    ; Methbolism Rate
+    ifelse (random-float 1.0 < 0.5)
+    [
+      set inheritedMethbolismRate item 6 [childFatherChromosomes] of mother
+    ]
+    [
+      set inheritedMethbolismRate item 6 [chromosomes] of mother
+    ]
+    
+    set chromosomes lput inheritedImmuneSystem chromosomes
+    set chromosomes lput inheritedStrength chromosomes
+    set chromosomes lput inheritedVision chromosomes
+    set chromosomes lput inheritedFertility chromosomes
+    set chromosomes lput inheritedHealRate chromosomes
+    set chromosomes lput inheritedSpeed chromosomes
+    set chromosomes lput inheritedMethbolismRate chromosomes
+    
+    setApe
+    
+  ]
+  
+  ask me
+  [
+    set pregnancy -1
+    set childFatherChromosomes nobody
+    set nursingInfant child
+    raiseEvent self createDeliveredChildEvent
+  ]
+  
+  set Births Births + 1
+
+end
+
+
+;##############################################################################################################################################
+
+; Updaters
+
+to updateStateVariables 
+  ask apes
+  [
+    if UpdateAge? [updateAge]
+    if UpdateSpeed? [updateSpeed]
+    if UpdateDiseaseTransmission? [updateDiseaseTransmission]
+    if UpdateImmuneSystem? [updateImmuneSystem]
+    if UpdateMetabolism? [updateMetabolism]
+    if UpdateHealth? [updateHealth]
+    if UpdateEnergy? [updateEnergy]
+    if UpdateVision? [updateVision]
+    if UpdateStrength? [updateStrength]
+    if UpdateFertility? [updateFertility]
+    if UpdateLongevity? [updateLongevity]
+    if UpdateSize? [updateSize]
+    if UpdateRank? [updateRank]
+    if UpdateMating? [updateMating]
+  ]
+  updateEnvironment
+end
+
+to updateClock
+  ifelse (periodOfDay = "Night" or periodOfDay = "Dawn")
+  [
+    set TimeResolution BaseTimeResolution * NightAcceleration
+  ]
+  [
+    set TimeResolution BaseTimeResolution
+  ]
+  set Clock Clock + TimeResolution
+end
+
+to updateSpeed
+  let speedGen item 5 chromosomes
+  let dv speedGen / longevity
+  set speed maximum (speedGen - dv * age) (0.3 * speedGen)
+end
+
+to updateAge
+  let pastAgeName getAgeName self
+  set age age + TimeResolution
+  let currentAgeName getAgeName self
+  if (currentAgeName != pastAgeName)
+  [
+    raiseEvent self createGrewupEvent currentAgeName
+  ]
+  if (isPregnant)
+  [
+    set pregnancy pregnancy + TimeResolution
+  ]
+  if (isChildReady)
+  [
+    raiseEvent self createChildReadyEvent
+  ]
+end
+
+to updateMetabolism
+  let methGen item 6 chromosomes
+  let mc 100 / (getBaseTimeFromDays methGen TimeResolution)
+  let prgf PregnanceMetabolism  
+  if (not isPregnant)
+  [set prgf 0]  
+  set metabolism mc * (1 + prgf)
+end
+
+to updateHealth
+  let healRateGen item 4 chromosomes
+  let hr (- 0.7 * age / longevity)
+  set healRate healRateGen * (hr + 1)
+  set healRate healRate * TimeResolution
+    
+  ; Wound
+  set health health - wound
+  set wound wound - healRate
+  set wound maximum wound 0
+  
+  ; Disease deteoration
+  foreach diseases
+  [
+    set health health - (item 1 ?)
+  ]
+  
+  set health health + healRate
+  set health minimum HealthMax health
+end
+
+to updateEnergy
+  set energy (minimum health energy) - metabolism
+  if (energy <= 0)
+  [raiseEvent self createDiedEvent] 
+end
+
+to updateVision
+  let visionGen item 2 chromosomes
+  let dv visionGen / longevity
+  set vision maximum (visionGen - dv * age) (0.2 * visionGen)
+end
+
+to updateStrength
+  
+  let ageInYears getTimeInYears age 1
+  let oneYear getBaseTimeFromYears 1 1
+  let strenghGen item 1 chromosomes
+  let lStrength strenghGen
+  let yearsOfAge age / oneYear
+  let yearsOfLongevity longevity / oneYear    
+  ifelse(ageInYears <= 1)
+  [
+    set lStrength 0.2 * strenghGen * yearsOfAge
+  ]
+  [
+    ifelse(ageInYears > 1 and ageInYears <= 3)
+    [
+      set lStrength strenghGen * (0.25 * yearsOfAge - 0.05)
+    ]
+    [
+      ifelse(ageInYears > 3 and ageInYears <= 8)
+      [
+        set lStrength strenghGen * (0.06 * yearsOfAge + 0.52)
+      ]
+      [
+        if (ageInYears > 18)
+        [
+          let alpha 0.7 / (8 - 0.8 * yearsOfLongevity)
+          let beta (1 - (5.6 / (8 - 0.8 * yearsOfLongevity)))
+          set lStrength (alpha * yearsOfAge + beta) * strenghGen
+        ]
+      ]
+    ]
+  ]
+  set strength lStrength
+end
+
+to updateFertility
+  let fertilityGen item 3 chromosomes
+  let ageInYears getTimeInYears age 1
+  ifelse (sex = "M")
+  [
+    ifelse(ageInYears < 4)
+    [
+      set fertility 0
+    ]
+    [
+      ifelse(ageInYears >= 4 and ageInYears < 25)
+      [
+        set fertility fertilityGen
+      ]
+      [
+        set fertility 0
+      ]
+    ]
+  ]
+  [
+    ifelse (ageInYears < 3)
+    [
+      set fertility 0
+    ]
+    [
+      ifelse(ageInYears >= 3 and ageInYears < 20)
+      [
+        set fertility fertilityGen * (- 0.0625 * ageInYears + 1.25)
+      ]
+      [
+        set fertility 0
+      ]
+    ]
+  ]
+  set fertility fertility * energy / HealthMax
+end
+
+to updateLongevity
+  if (age >= longevity)
+  [raiseEvent self createDiedEvent]
+end
+
+to updateSize
+  
+  let ageInYears getTimeInYears age 1
+  let ageName getAgeName self
+  let gc 1
+  
+  if (ageName != "adult")
+  [
+    ifelse (sex = "M")
+    [
+      set gc 0.3 + (0.7 * ageInYears / 3)
+    ]
+    [
+      set gc 0.3 + (0.7 * ageInYears / 4)
+    ]
+  ]
+  
+  set gc minimum 1 gc
+
+  ifelse (sex = "M")
+  [
+    set size 0.53 * gc * patch-size / SpaceResolution
+  ]
+  [
+    set size 0.47 * gc * patch-size / SpaceResolution
+  ]
+end
+
+to updateEnvironment
+  updateSeason
+  updatePeriodOfDay
+end
+
+to updateSeason
+  let seasonEnergy 0
+  let currentSeason getSeason
+  if (currentSeason != Season)
+  [
+    ifelse (currentSeason = "Winter")
+    [
+      set seasonEnergy WinterAvailableEnergy
+    ]
+    [
+      ifelse (currentSeason = "Spring")
+      [
+        set seasonEnergy SpringAvailableEnergy
+      ]
+      [
+        ifelse (currentSeason = "Summer")
+        [
+          set seasonEnergy SummerAvailableEnergy
+        ]
+        [
+          set seasonEnergy FallAvailableEnergy
+        ]
+      ]
+    ]
+    ask trees
+    [
+      set energy random-normal seasonEnergy (FruitTotalEnergy * 50)
+      set color scale-color green energy (SummerAvailableEnergy / 8) (SummerAvailableEnergy * 2)
+    ]
+    ask apes
+    [
+     raiseEvent self createSeasonChangedEvent Season 
+    ]
+    set Seasons Seasons + 1
+  ]
+  set Season currentSeason
+end
+
+to updatePeriodOfDay
+  let currentPeriodOfDay getPeriodOfDay
+  let aColor 0
+  if (PeriodOfDay != currentPeriodOfDay)
+  [
+    ifelse (currentPeriodOfDay = "Morning")
+    [
+      set aColor rgb 251 232 126
+    ]
+    [
+      ifelse (currentPeriodOfDay = "Afternoon")
+      [
+        set aColor rgb 254 187 20 
+      ]
+      [
+        ifelse (currentPeriodOfDay = "Evening")
+        [
+          set aColor rgb 174 103 20 
+        ]
+        [
+          ifelse (currentPeriodOfDay = "Night")
+          [
+            set aColor rgb 2 5 83
+          ]
+          [
+            set aColor rgb 2 23 137
+          ]
+        ]
+      ]
+    ]
+    ask astro
+    [
+      set color aColor 
+    ]
+    ask apes
+    [
+      raiseEvent self (createPeriodChangedEvent currentPeriodOfDay)
+    ]
+    ; Update Tribes Location
+    if (currentPeriodOfDay = "Night")
+    [
+      updateTribes
+    ]
+    updateTrees
+  ]
+  set PeriodOfDay currentPeriodOfDay
+end
+
+to updateRank
+  ifelse(sex = "M")
+  [
+    set rank strength
+  ]
+  [
+    set rank (- generation + fertility  + 34)
+  ]
+end
+
+to updateDiseaseTransmission
+  ask other apes in-radius size
+  [
+    let myDiseases [diseases] of myself
+    if (length myDiseases > 0)
+    [
+      let disease item (random length myDiseases) myDiseases
+      if (not member? disease diseases)
+      [
+        set diseases lput disease diseases
+      ]
+    ]
+  ]
+end
+
+to updateImmuneSystem
+  let deleteList []
+  foreach diseases
+  [
+    let code item 0 ?
+    
+    ; Gets the index of minimum hamming distance
+    let result findLeastHammingDistance immuneSystem code
+    
+    let iStartIndex item 0 result
+    let d item 1 result
+        
+    ; Distance is zero so remove disease
+    ifelse(d = 0)
+    [
+      set deleteList lput ? deleteList
+    ]
+    ; Alter immmune system
+    [
+      let index 0
+      let iIndex iStartIndex
+      let break false
+      while [(index < length code) and break = false]
+      [
+
+        let symbol item index code
+        ifelse(symbol != item iIndex immuneSystem)
+        [
+          set immuneSystem replace-item iIndex immuneSystem symbol
+          set break true
+        ]
+        [
+          set index index + 1 
+          set iIndex iIndex + 1
+        ]
+      ]
+    ]    
+  ]
+      
+  ; Remove diseases
+  foreach deleteList
+  [
+   set diseases remove ? diseases 
+  ]
+  
+end
+
+to updateMating
+  set timeWithoutMate timeWithoutMate + TimeResolution
+  if (sex = "M")
+  [
+    if (timeWithoutMate >= getBaseTimeFromDays DaysToForgetPastSexualPartners 1)
+    [
+      set pastSexualPartners (turtle-set nobody)
+    ]
+  ]
+end
+
+to updateTribes
+
+  ask tribes
+  [
+    ask troops with [myself = mytribe]
+    [
+      ; Gets members and separate between leader and followers
+      let members apes with [mytroop = myself]
+      let tribeLeader max-one-of members [strength]
+      let lFollowers members with [self != tribeLeader]
+      let lTroop self
+      set leader tribeLeader
+      set followers lFollowers
+      ask followers with [getAgeName self != "Infant"]
+      [
+        set color [color] of lTroop
+      ]
+      if (tribeLeader != nobody)
+      [
+        set xcor [xcor] of tribeLeader
+        set ycor [ycor] of tribeLeader
+        ask leader
+        [
+          set homeX xcor
+          set homeY ycor
+          set color rgb 2 5 83  
+        ]
+      ]
+      ; Update home
+      set radius 0
+      let groups groupByStrength lFollowers
+      foreach groups
+      [
+        let d ((item 0 ?) + (random-float (2 * SectorWidth) - SectorWidth))
+        set d d / SpaceResolution
+        
+        ; update troop radius
+        if (d > radius)
+        [
+         set radius d 
+        ]
+        
+        set members item 1 ?
+        let lLeader [leader] of lTroop
+        foreach members
+        [
+          let theta random 360
+          setHomeTroopLocation ? ([xcor] of lTroop) ([ycor] of lTroop) d theta
+        ]
+      ] 
+      set size radius / SpaceResolution
+    ]
+  ]
+end
+
+to updateTrees
+  ask trees
+  [
+    set color scale-color green energy (SummerAvailableEnergy / 8) (SummerAvailableEnergy * 2)
+  ]
+end
+
+;##############################################################################################################################################
+
+; Events
+
+to raiseEvent [me event]
+  if (LogEvents?)
+  [
+    logToFile event
+  ]
+  if (me != 0 and me != nobody)
+  [
+    let eventName item 0 event
+    ifelse (eventName = "Grewup")
+    [
+      set AgeChanges AgeChanges + 1
+    ]
+    [
+      if (eventName = "Safe")
+      [
+        set Escapes Escapes + 1
+      ]
+    ]
+    ask me
+    [
+      set events lput event events
+    ]
+  ]
+end
+
+to-report createHungryEvent
+  report ["Hungry"]
+end
+
+to-report createAssaultedEvent [aggressor]
+  let event ["Assaulted"]
+  set event lput aggressor event
+  report event
+end
+
+to-report createSawFemaleEvent [female]
+  let event ["SawFemale"]
+  set event lput female event
+  report event
+end
+
+to-report createSawMaleEvent [male]
+  let event ["SawMale"]
+  set event lput male event
+  report event
+end
+
+to-report createChildReadyEvent
+ report ["ChildReady"]
+end
+
+to-report createDeliveredChildEvent
+ report ["Delivered"]
+end
+
+to-report createDiedEvent
+ report ["Died"]
+end
+
+to-report createSatisfiedEvent
+ report ["Satisfied"]
+end
+
+to-report createSeasonChangedEvent [s]
+  let event ["SeasonChanged"]
+  set event lput s event
+  report event
+end
+
+to-report createPeriodChangedEvent [p]
+  let event ["PeriodChanged"]
+  set event lput p event
+  report event
+end
+
+to-report createFedEvent [f]
+  let event ["Fed"]
+  set event lput f event
+  report event
+end
+
+to-report createSafeEvent
+  report ["Safe"]
+end
+
+to-report createDoneMatingEvent [active passive]
+  let event ["DoneMating"]
+  set event lput active event
+  set event lput passive event
+  report event
+end
+
+to-report createFlurtedMatingEvent [flurter flurtee]
+  let event ["Flurted"]
+  set event lput flurter event
+  set event lput flurtee event
+  report event
+end
+
+to-report createDecidedMatingEvent [passive active decision]
+  let event ["DecidedMating"]
+  set event lput passive event
+  set event lput active event
+  set event lput decision event
+  report event
+end
+
+to-report createGrewupEvent [currentAgeName]
+  let event ["Grewup"]
+  set event lput currentAgeName event
+  report event
+end
+
+to-report createAteEvent
+  report ["Ate"]
+end
+
+to-report createEnemyOutOfReach
+  report ["EnemyOutOfReach"]
+end
+
+;##############################################################################################################################################
+
+; AI
+
+to ai
+  ask apes
+  [
+    while [length events > 0]
+    [
+      ; Get sensed events
+      let event item 0 events ; gets the car of the list
+      set events remove event events
+      ; Adapt and Predict
+      set lastState state
+      adaptPredict event
+    ]
+    ; Interact
+    interact
+  ]
+end
+
+;##############################################################################################################################################
+
+; Sense Adapt Predict
+
+to adaptPredict [event]
+  let ageName getAgeName self
+  ifelse (ageName = "Infant")
+  [
+    adaptPredictInfant event
+  ]
+  [
+    ifelse(ageName = "Yearling")
+    [
+      adaptPredictYearling event
+    ]
+    [
+      ifelse(ageName = "Juvenile")
+      [
+        adaptPredictJuvenile event
+      ]
+      [
+        ifelse (sex = "M")
+        [
+          adaptPredictAdultMale event
+        ]
+        [
+          adaptPredictAdultFemale event
+        ]
+      ]
+    ]
+  ]
+end
+
+to adaptPredictInfant [event]
+  let eventName item 0 event
+  ifelse (eventName = "Died")
+  [
+    set state "Dead"
+  ]
+  [
+    ifelse (eventName = "Fed" and state = "BeingNursed")
+    [
+      let givenFood item 1 event
+      set food givenFood
+      set state "Eating"
+    ]
+    [
+      ifelse (eventName = "Ate")
+      [
+        set state "BeingNursed"
+      ]
+      [
+        ifelse (eventName = "Assaulted")
+        [
+          set state "BeingAttacked"
+          set assaulter item 1 event
+        ]
+        [
+         ifelse (eventName = "Safe")
+         [
+           set assaulter nobody
+           set state "BeingNursed"
+         ]
+         [
+           ; Keep being a child
+           if (eventName = "Grewup")
+           [
+             set state "BeingNursed"
+           ]
+         ]
+        ]
+      ]
+    ] 
+  ]
+end
+
+to adaptPredictYearling [event]
+  let eventName item 0 event
+  ifelse (eventName = "Died")
+  [
+    set state "Dead"
+  ]
+  [
+    ifelse (eventName = "Fed" and state = "BeingNursed")
+    [
+      let givenFood item 1 event
+      set food givenFood
+      set state "Eating"
+    ]
+    [
+      ifelse (eventName = "Ate")
+      [
+        set state "BeingNursed"
+      ]
+      [
+        ifelse (eventName = "Assaulted")
+        [
+          set state "BeingAttacked"
+          set assaulter item 1 event
+        ]
+        [
+         ifelse (eventName = "Safe")
+         [
+           set assaulter nobody
+           set state "BeingNursed"
+         ]
+         [
+           ; This will be implemented on infants now since their DFA is the same
+           if (eventName = "Grewup")
+           [
+             set state "BeingNursed"
+           ]
+         ]
+        ]
+      ]
+    ] 
+  ]
+end
+
+to adaptPredictJuvenile [event]
+  let eventName item 0 event
+  ifelse (eventName = "Died")
+  [
+    set state "Dead"
+  ]
+  [
+    ifelse (eventName = "Hungry" and state = "Sensing")
+    [
+      set state "Foraging"
+    ]
+    [
+      ifelse (eventName = "Satisfied")
+      [
+        set state "Sensing"
+      ]
+      [
+        ifelse (eventName = "Assaulted")
+        [
+          set assaulter item 1 event
+          if (assaulter != nobody)
+          [
+            ifelse (isOponentStronger assaulter StrengthEngagementTolerance)
+            [
+              set state "BeingAttackedByBiggerAnimal"
+            ]
+            [
+              set state "BeingAttackedBySmallerOrSameSizeAnimal"
+            ]
+            set assaulter item 1 event
+          ]
+        ]
+        [
+          ifelse (eventName = "PeriodChanged")
+          [
+            let currentPeriodOfDay item 1 event
+            ifelse (currentPeriodOfDay = "Night" or currentPeriodOfDay = "Dawn")
+            [
+              set state "Sleeping"
+            ]
+            [
+              set state "Sensing"
+            ]
+          ]
+          [
+            ifelse (eventName = "Safe")
+            [
+              set assaulter nobody
+              set state "Sensing"
+            ]
+            [
+              if (eventName = "Grewup")
+              [
+                set state "Sensing"
+              ]
+            ]
+          ]
+        ]
+      ]
+    ] 
+  ]
+end
+
+to adaptPredictAdultMale [event]
+  let eventName item 0 event
+  ifelse (eventName = "Died")
+  [
+    set state "Dead"
+  ]
+  [
+    ifelse (eventName = "Hungry" and state = "Sensing")
+    [
+      set state "Foraging"
+    ]
+    [
+      ifelse (eventName = "Satisfied")
+      [
+        set state "Sensing"
+      ]
+      [
+        ifelse (eventName = "Assaulted")
+        [
+          set assaulter item 1 event
+          if (assaulter != nobody)
+          [
+            ifelse (isOponentStronger assaulter AdultMaleEngagementTolerance)
+            [
+              set state "BeingAttackedByBiggerAnimal"
+            ]
+            [
+              set state "BeingAttackedBySmallerOrSameSizeAnimal"
+            ]
+            set assaulter item 1 event
+          ]
+        ]
+        [
+          ifelse (eventName = "PeriodChanged")
+          [
+            let currentPeriodOfDay item 1 event
+            ifelse (currentPeriodOfDay = "Night" or currentPeriodOfDay = "Dawn")
+            [
+              set state "Sleeping"
+            ]
+            [
+              set state "Sensing"
+            ]
+          ]
+          [
+            ifelse (eventName = "Safe")
+            [
+              set assaulter nobody
+              set state "Sensing"
+            ]
+            [
+              ifelse (eventName = "SawFemale" and (isMatingSeason Clock) and (timeWithoutMate >= getBaseTimeFromDays DaysWithoutMatingTolerance 1))
+              [
+                let spartner item 1 event
+                if (not any? pastSexualPartners with [self = sexualPartner])
+                [
+                  set sexualPartner spartner
+                  set state "Flurting"
+                ]
+              ]
+              [
+                ifelse (eventName = "DecidedMating")
+                [
+                  let passive item 1 event
+                  let active item 2 event
+                  let decision item 3 event
+                  set sexualPartner passive
+                  ifelse(decision = 1)
+                  [                    
+                    set state "Mating"
+                  ]
+                  [
+                    set state "Sensing"
+                  ]
+                  set pastSexualPartners (turtle-set passive)
+                ]
+                [
+                  ifelse (eventName = "SawMale" and aggressiveness >= AttackingAggressivenessTolerance)
+                  [
+                    let enemy item 1 event
+                    if (enemy != nobody)
+                    [
+                      if (not isOponentStronger enemy AdultMaleEngagementTolerance)
+                      [
+                        set targetedEnemy enemy
+                        set state "AttackingOtherMales"
+                      ]
+                    ]
+                  ]
+                  [
+                    ifelse (eventName = "EnemyOutOfReach")
+                    [
+                     set state "Sensing" 
+                    ]
+                    [
+                     if (eventName = "DoneMating")
+                     [
+                       set state "Sensing" 
+                     ] 
+                    ]
+                  ]
+                ] 
+              ]  
+            ]
+          ]
+        ]
+      ]
+    ] 
+  ]
+end
+
+to adaptPredictAdultFemale [event]
+  let eventName item 0 event
+  ifelse (eventName = "Died")
+  [
+    set state "Dead"
+  ]
+  [
+    ifelse (eventName = "Hungry" and state = "Sensing")
+    [
+      set state "Foraging"
+    ]
+    [
+      ifelse (eventName = "Satisfied")
+      [
+        set state "Sensing"
+      ]
+      [
+        ifelse (eventName = "Assaulted")
+        [
+          set assaulter item 1 event
+          if (assaulter != nobody)
+          [
+            ifelse (isOponentStronger assaulter StrengthEngagementTolerance)
+            [
+              set state "BeingAttackedByBiggerAnimal"
+            ]
+            [
+              set state "BeingAttackedBySmallerOrSameSizeAnimal"
+            ]
+            set assaulter item 1 event
+          ]
+        ]
+        [
+          ifelse (eventName = "PeriodChanged")
+          [
+            let currentPeriodOfDay item 1 event
+            ifelse (currentPeriodOfDay = "Night" or currentPeriodOfDay = "Dawn")
+            [
+              set state "Sleeping"
+            ]
+            [
+              set state "Sensing"
+            ]
+          ]
+          [
+            ifelse (eventName = "Safe")
+            [
+              set assaulter nobody
+              set state "Sensing"
+            ]
+            [
+              ifelse (eventName = "Flurted")
+              [
+                set sexualPartner item 1 event
+                set state "BeingFlurted"
+              ]
+              [
+                ifelse (eventName = "DecidedMating")
+                [
+                  let passive item 1 event
+                  let active item 2 event
+                  let decision item 3 event
+                  set sexualPartner active
+                  ifelse(decision = 1)
+                  [                    
+                    set state "Mating"
+                  ]
+                  [
+                    set state "Sensing"
+                  ]
+                  set pastSexualPartners (turtle-set active)
+                ]
+                [
+                  ifelse (eventName = "DoneMating")
+                  [
+                    set state "Sensing"
+                  ]
+                  [
+                    ifelse (eventName = "ChildReady")
+                    [
+                      set state "Delivering"
+                    ]
+                    [
+                      ifelse (eventName = "Delivered")
+                      [
+                        set state "Sensing"
+                      ]
+                      [
+                       if (eventName = "SawFemale" and aggressiveness >= AttackingAggressivenessTolerance)
+                       [
+                         let enemy item 1 event
+                         if (enemy != nobody)
+                         [
+                           if (not isOponentStronger enemy AdultFemaleEngagementTolerance)
+                           [
+                             set targetedEnemy enemy
+                             set state "AttackingOtherFemales"
+                           ]
+                         ]
+                       ] 
+                      ]
+                    ]
+                  ]
+                ] 
+              ]  
+            ]
+          ]
+        ]
+      ]
+    ] 
+  ]
+end
+
+;##############################################################################################################################################
+
+; Interact
+
+to interact
+  let ageName getAgeName self
+  ifelse (ageName = "Infant")
+  [
+    interactInfant
+  ]
+  [
+    ifelse(ageName = "Yearling")
+    [
+      interactYearling
+    ]
+    [
+      ifelse(ageName = "Juvenile")
+      [
+        interactJuvenile
+      ]
+      [
+        ifelse (sex = "M")
+        [
+          interactAdultMale
+        ]
+        [
+          interactAdultFemale
+        ]
+      ]
+    ]
+  ]
+end
+
+to interactInfant
+  ifelse (state = "Dead")
+  [
+    killApe
+  ]
+  [
+    ifelse (state = "BeingNursed")
+    [
+      if (mother != nobody)
+      [
+        attachToMom
+      ]
+    ]
+    [
+      ifelse (state = "BeingAttacked")
+      [
+        if (mother != nobody)
+        [
+          runToMother
+          attachToMom
+        ]
+        if (isSafe assaulter)
+        [
+          raiseEvent self createSafeEvent
+        ]
+      ]
+      [
+        if (state = "Eating")
+        [
+          eat food
+          set food 0
+          raiseEvent self createAteEvent 
+        ]
+      ]
+    ]
+  ]
+end
+
+to interactYearling
+  interactInfant
+end
+
+to interactJuvenile
+  ifelse (state = "Dead")
+  [
+    killApe 
+  ]
+  [
+    ifelse (state = "Sensing")
+    [
+      senseJuvenile
+    ]
+    [
+      ifelse (state = "BeingAttackedByBiggerAnimal")
+      [
+        runAway self assaulter
+        if (isSafe assaulter)
+        [
+          raiseEvent self createSafeEvent
+        ]
+      ]
+      [
+        ifelse (state = "BeingAttackedBySmallerOrSameSizeAnimal")
+        [
+          attack self assaulter
+          if (isSafe assaulter)
+          [
+            raiseEvent self createSafeEvent
+          ] 
+        ]
+        [
+          ifelse (state = "Foraging")
+          [
+            forage self
+            if (energy = health)
+            [
+              raiseEvent self createSatisfiedEvent
+            ] 
+          ]
+          [
+            if (state = "Sleeping")
+            [
+              sleep
+            ]  
+          ]   
+        ]  
+      ]
+    ]
+  ]
+end
+
+to interactAdultMale
+  ifelse (state = "Dead")
+  [
+    killApe 
+  ]
+  [
+    ifelse (state = "Sensing")
+    [
+      senseAdultMale
+    ]
+    [
+      ifelse (state = "BeingAttackedByBiggerAnimal")
+      [
+        runAway self assaulter
+        if (isSafe assaulter)
+        [
+          raiseEvent self createSafeEvent
+          followTroop self
+        ] 
+      ]
+      [
+        ifelse (state = "BeingAttackedBySmallerOrSameSizeAnimal")
+        [
+          attack self assaulter
+          if (isSafe assaulter)
+          [
+            raiseEvent self createSafeEvent
+          ] 
+        ]
+        [
+          ifelse (state = "Foraging")
+          [
+            forage self
+            if (energy >= health)
+            [
+              raiseEvent self createSatisfiedEvent
+            ] 
+          ]
+          [
+            ifelse (state = "AttackingOtherMales")
+            [
+              attack self targetedEnemy
+              if (isEnemyOutOfReach targetedEnemy)
+              [
+                raiseEvent self createEnemyOutOfReach
+              ]
+              checkAggressiveness
+            ]
+            [
+              ifelse (state = "Flurting")
+              [
+                flurt self sexualPartner
+              ]
+              [
+                ifelse (state = "Mating")
+                [
+                  mate self sexualPartner
+                ]
+                [
+                 if (state = "Sleeping")
+                 [
+                   sleep
+                 ] 
+                ]
+              ] 
+            ]   
+          ]   
+        ]  
+      ]
+    ]
+  ]
+end
+
+to interactAdultFemale
+  ifelse (state = "Dead")
+  [
+    if (generation = 34)
+    [
+      ask apes with [family = [family] of myself]
+      [
+        set generation (generation - 1)
+      ]
+    ]
+    killApe
+  ]
+  [
+    ifelse (state = "Sensing")
+    [
+      senseAdultFemale
+    ]
+    [
+      ifelse (state = "BeingAttackedByBiggerAnimal")
+      [
+        runAway self assaulter
+        if (isSafe assaulter)
+        [
+          raiseEvent self createSafeEvent
+        ]
+      ]
+      [
+        ifelse (state = "BeingAttackedBySmallerOrSameSizeAnimal")
+        [
+          attack self assaulter
+          if (isSafe assaulter)
+          [
+            raiseEvent self createSafeEvent
+          ]
+        ]
+        [
+          ifelse (state = "Foraging")
+          [
+            forage self
+            if (energy >= health)
+            [
+              raiseEvent self createSatisfiedEvent
+            ] 
+          ]
+          [
+            ifelse (state = "Delivering")
+            [
+              deliverChild self
+            ]
+            [
+              ifelse (state = "BeingFlurted")
+              [
+                decideToMate self sexualPartner
+              ]
+              [
+                ifelse (state = "Mating")
+                [
+                  mate self sexualPartner
+                ]
+                [
+                  ifelse (state = "Sleeping")
+                  [
+                   sleep 
+                  ]
+                  [
+                   if (state = "AttackingOtherFemales")
+                   [
+                     attack self targetedEnemy
+                     if (isEnemyOutOfReach targetedEnemy)
+                     [
+                       raiseEvent self createEnemyOutOfReach
+                     ]
+                     checkAggressiveness
+                   ] 
+                  ]
+                ]
+              ] 
+            ]   
+          ]   
+        ]  
+      ]
+    ]
+  ]
+end
+
+;##############################################################################################################################################
+
+; Behaviours
+
+; Attack someone
+
+to attack [offender offended]
+ if (offender != nobody and offended != nobody)
+ [
+   ask offender
+   [
+     let resolvedAttackRange attackRange / SpaceResolution
+     ifelse(any? apes in-radius resolvedAttackRange with [self = offended])
+     [
+       face offended
+       set energy energy - 0.5
+       strike offender offended
+     ]
+     [
+       face offended
+       walkFast
+     ]
+   ]
+   set Engagements Engagements + 1
+ ]
+end
+
+; Strike someone
+
+to strike [offender offended]
+  if (offended != nobody)
+  [
+    ask offended
+    [
+      let offenderStrength [strength] of offender
+      set health health - offenderStrength
+      set wound wound + offenderStrength / (getBaseTimeFromDays 5 1)
+      raiseEvent self createAssaultedEvent offender
+    ]
+  ]
+end
+
+; Defend
+
+to defend [offender offended]
+  attack offender offended
+end
+
+; Eat
+
+to forage [me]
+  ask me
+  [
+    let targetTree nobody
+    let resolvedVision vision / SpaceResolution
+    let lXCor xcor
+    let lYCor ycor
+    let nearestTree min-one-of trees with [energy >= fruitEnergy] in-radius resolvedVision [distancexy lXCor lYCor]
+    ifelse(nearestTree = nobody)
+    [
+      set nearestTree min-one-of forageTrees [distancexy lXCor lYCor]
+    ]
+    [
+      set forageTrees (turtle-set forageTrees nearestTree)
+    ]
+    set targetTree nearestTree
+    ifelse(targetTree != nobody)
+    [
+      ifelse(any? trees in-radius (size * 2) with [self = targetTree])
+      [
+        face targetTree
+        move-to targetTree
+        if ([energy] of targetTree >= [fruitEnergy] of targetTree)
+        [
+          eat [fruitEnergy] of targetTree
+          ask targetTree
+          [
+            set energy energy - fruitEnergy
+          ]
+        ]
+      ]
+      [
+        face targetTree
+        walk
+      ]
+      let mostEnergy reverse sort-on [energy] forageTrees with [energy >= fruitEnergy]
+      set forageTrees (turtle-set sublist mostEnergy 0 (minimum length mostEnergy 5))
+    ]
+    [
+      wander
+    ]
+  ]
+end
+
+to eat [f]
+  set energy energy + f
+  set energy minimum health energy
+end
+
+to attachToMom
+  move-to mother
+end
+
+to runToMother
+  face mother
+  walkFast
+end
+
+to runAway [me from]
+ if (from != nobody)
+ [
+   face from
+   rt 180
+   runFastest
+ ]
+end
+
+to-report getResolvedSpeed
+  report speed / SpaceResolution
+end
+
+to walk
+  fd 1
+  set energy energy - 0.0001 * HealthMax
+end
+
+to walkFast
+  fd 2
+  set energy energy - 0.001 * HealthMax
+end
+
+to runFastest
+  fd speed
+  set energy energy - 0.002 * HealthMax
+end
+
+to nurseChild
+  if (nursingInfant != nobody)
+  [
+    let childAge getAgeName nursingInfant
+    ifelse (childAge = "Infant" or childAge = "Yearling")
+    [
+      if ([energy] of nursingInfant <= (HungerTolerance * HealthMax))
+      [
+        let givenEnergy HealthMax * (1 - HungerTolerance)
+        set energy energy - givenEnergy
+        raiseEvent nursingInfant createFedEvent givenEnergy
+      ]
+    ]
+    [
+      set nursingInfant nobody
+    ]
+  ]
+end
+
+to flurt [me partner]
+  ask partner
+  [
+    raiseEvent partner createFlurtedMatingEvent me partner
+  ]
+  set Flurts Flurts + 1
+end
+
+to decideToMate [me partner]
+ let event []
+ let decision 0
+ if (isMatingSeason Clock)
+ [
+   ifelse (any? pastSexualPartners with [self = partner])
+   [
+     ifelse (not any? apes in-radius vision with [sex = "M"])
+     [
+       set decision 1
+     ]
+     [
+       set decision 0
+     ]
+   ]
+   [
+     set decision 1 
+   ]
+ ]
+ set event createDecidedMatingEvent me partner decision
+ raiseEvent me event
+ raiseEvent partner event
+end
+
+to mate [me partner]
+  let event []
+  ask me
+  [
+    ifelse (sex = "M")
+    [
+      set timeWithoutMate 0
+      set event createDoneMatingEvent me partner
+    ]
+    [
+      if (random-float 1.0 <= (fertility * ([fertility] of partner)) and pregnancy < 0)
+      [
+        set pregnancy 0
+        set childFatherChromosomes [chromosomes] of partner
+      ]
+      set event createDoneMatingEvent partner me
+    ]
+  ]
+  move-to partner
+  set sexualPartner nobody
+  set Mates Mates + 1
+  raiseEvent me event
+end
+
+to checkAggressiveness
+  let competitionAggressiveness 0
+  let eAggressiveness 0
+  if (mytroop != nobody and sex = "M")
+  [
+    let ratio 1
+    let malesNumber count apes with [sex = "M" and mytroop = [mytroop] of myself and (getAgeName self = "Adult")]
+    let femalesNumber count apes with [sex = "F" and mytroop = [mytroop] of myself and (getAgeName self = "Adult")]
+    if (malesNumber > 0)
+    [
+      set ratio femalesNumber / malesNumber
+    ]
+    if (ratio <= FemaleMaleRatioTolerance)
+    [
+      set competitionAggressiveness 1
+    ]
+  ]
+  ifelse (energy <= HungryAggressivenessTolerance * HealthMax)
+  [
+    set eAggressiveness 1
+  ]
+  [
+    set eAggressiveness (2 - 2 * (energy / HealthMax))
+  ]
+  let totalAggressiveness competitionAggressiveness + eAggressiveness
+  set aggressiveness maximum 0 (minimum 1 totalAggressiveness)
+end
+
+to checkIfHungry
+  if (energy <= HungerTolerance * health)
+  [
+    raiseEvent self createHungryEvent
+  ]
+end
+
+to wander
+  if (lastTimeMoved >= MovePeriod)
+  [
+    ifelse (random-float 1.0 < 0.5)
+    [
+      rt random MovingTurnDegrees
+    ]
+    [
+      lt random MovingTurnDegrees
+    ]
+    walk
+    set lastTimeMoved 0
+  ]
+  set lastTimeMoved lastTimeMoved + TimeResolution
+end
+
+to followTroop [me]
+  let lTroop nobody
+  if (mytroop != nobody)
+  [
+    if (distancexy homeX homeY > 2 * [radius] of mytroop)
+    [
+      ask me
+      [
+        facexy homeX homeY
+        walk 
+      ]
+    ]
+  ]
+end
+
+to sleep
+  goHome
+end
+
+to senseJuvenile
+  wander
+  followTroop self
+  checkIfHungry
+end
+
+to senseAdultMale
+  wander
+  checkAggressiveness
+  checkIfHungry
+  ask apes in-radius (vision / SpaceResolution) with [sex = "F" and self != myself and (getAgeName self = "Adult")]
+  [
+    raiseEvent myself createSawFemaleEvent self
+  ]
+  ask apes in-radius (vision / SpaceResolution) with [sex = "M" and self != myself and ((getTimeInYears age 1) >= MaleAgeTolerance)]
+  [
+    raiseEvent myself createSawMaleEvent self
+  ]
+end
+
+to senseAdultFemale
+  wander
+  checkAggressiveness
+  nurseChild
+  checkIfHungry
+  ask apes in-radius (vision / SpaceResolution) with [sex = "F" and self != myself and (getAgeName self = "Adult")]
+  [
+    raiseEvent myself createSawFemaleEvent self
+  ]
+end
+
+to goHome
+  if (distancexy homeX homeY >= (1 / SpaceResolution))
+  [
+    facexy homeX homeY
+    walk
+  ]
+end
+
+to killApe
+  set Deaths Deaths + 1
+  die
+end
+
+;##############################################################################################################################################
+
+; Queries
+
+to-report isOponentStronger [oponent tolerance]
+  let OponentVigor ([strength] of oponent) * ([energy] of oponent)
+  let myVigor (strength * energy)
+  report OponentVigor - myVigor > (tolerance * HealthMax)
+end
+
+to-report isSafe [myassaulter]
+  let resolvedVision vision / SpaceResolution
+  report not any? apes in-radius resolvedVision with [self = myassaulter]
+end
+
+to-report isEnemyOutOfReach [enemy]
+  let resolvedVision vision / SpaceResolution
+  report not any? apes in-radius resolvedVision with [self = enemy]
+end
